@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  name      String?
+  address   String?
+  city      String?
+  state     String?
+  country   String?
+  zipCode   String?
+  latitude  Float?
+  longitude Float?
+  timezone  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sensors Sensor[]
+
+  @@map("locations")
+}
+
+model Sensor {
+  id              String   @id
+  serialNumber    String?
+  name            String?
+  locationId      String?
+  locationName    String?
+  wifiSsid        String?
+  pm25            Float?
+  pm01            Float?
+  pm10            Float?
+  pm03PCount      Float?
+  atmp            Float?
+  rhum            Float?
+  rco2            Float?
+  tvoc            Float?
+  nox             Float?
+  wifi            Float?
+  boot            Float?
+  model           String?
+  firmwareVersion String?
+  ledBarTest      String?
+  date            String?
+  timestamp       Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  location        Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  measurements    Measurement[]
+  alerts          Alert[]
+  configurations  Configuration[]
+
+  @@map("sensors")
+}
+
+model Measurement {
+  id           String   @id @default(uuid())
+  sensorId     String?
+  serialNumber String?
+  pm25         Float?
+  pm01         Float?
+  pm10         Float?
+  pm03PCount   Float?
+  atmp         Float?
+  rhum         Float?
+  rco2         Float?
+  tvoc         Float?
+  nox          Float?
+  wifi         Float?
+  boot         Float?
+  date         String?
+  timestamp    Int?
+  createdAt    DateTime @default(now())
+
+  sensor Sensor? @relation(fields: [sensorId], references: [id], onDelete: SetNull)
+
+  @@index([sensorId])
+  @@index([serialNumber])
+  @@index([timestamp])
+  @@index([createdAt])
+  @@map("measurements")
+}
+
+enum AlertSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+model Alert {
+  id           String        @id
+  sensorId     String?
+  serialNumber String?
+  type         String?
+  severity     AlertSeverity?
+  message      String?
+  threshold    Float?
+  currentValue Float?
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  resolvedAt   DateTime?
+
+  sensor Sensor? @relation(fields: [sensorId], references: [id], onDelete: SetNull)
+
+  @@index([sensorId])
+  @@index([serialNumber])
+  @@index([isActive])
+  @@map("alerts")
+}
+
+model Configuration {
+  id           String   @id
+  sensorId     String?
+  serialNumber String?
+  key          String?
+  value        Json?
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sensor Sensor? @relation(fields: [sensorId], references: [id], onDelete: SetNull)
+
+  @@index([sensorId])
+  @@index([serialNumber])
+  @@index([key])
+  @@map("configurations")
+}
+
