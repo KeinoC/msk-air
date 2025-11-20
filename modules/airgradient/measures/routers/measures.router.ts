@@ -21,7 +21,22 @@ export const measuresRouter = {
     .input(measureSchemas.getLocationCurrentMeasures.request)
     .output(measureSchemas.getLocationCurrentMeasures.response)
     .handler(async ({ input }) => {
-      return await airGradientClient.get(`/locations/${input.locationId}/measures/current`);
+      try {
+        const result = await airGradientClient.get(`/locations/${input.locationId}/measures/current`);
+        console.log('AirGradient API response for location', input.locationId, ':', result);
+
+        // If result is not an array, return empty array
+        if (!Array.isArray(result)) {
+          console.warn('Expected array from AirGradient API, got:', typeof result, result);
+          return [];
+        }
+
+        return result;
+      } catch (error) {
+        console.error('Error fetching location measures:', error);
+        // Return empty array instead of throwing
+        return [];
+      }
     }),
 
   getLocationRawMeasures: publicProcedure

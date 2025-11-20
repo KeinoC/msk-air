@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { orpcClient } from "@/lib/orpc/client";
+import { useMeasurements } from "@/hooks/use-measurements";
+import { MeasurementChart } from "./components/measurement-chart";
+import { MeasurementActionBar } from "./components/measurement-action-bar";
+import { type DateRange } from "./components/measurement-date-range-picker";
 
 interface Location {
   id: string;
@@ -149,6 +153,72 @@ export default function LocationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [dateRange, setDateRange] = useState<DateRange>({
+    startDate: new Date(Date.now() - 24 * 60 * 60 * 1000), // 24 hours ago (today)
+    endDate: new Date(), // Today
+  });
+
+  const handleDateRangeChange = (newRange: DateRange) => {
+    setDateRange(newRange);
+  };
+
+  // Load selected fields from localStorage or use defaults
+  const [selectedFields, setSelectedFields] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`msk-air-fields-${locationId}`);
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.warn('Failed to parse saved fields, using defaults');
+        }
+      }
+    }
+    return ["pm02", "atmp", "rhum"];
+  });
+
+  // Save selected fields to localStorage when they change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`msk-air-fields-${locationId}`, JSON.stringify(selectedFields));
+    }
+  }, [selectedFields, locationId]);
+
+  // Convert location ID string to number for measurement queries
+  // Location.id is stored as String(apiLocationId), so we need to parse it back
+  // Measurements store locationId as Int (number from API)
+  const locationIdNumber = location?.id
+    ? (() => {
+        // Try parsing as decimal first, then hex if that fails
+        const decimal = parseInt(location.id, 10);
+        if (!isNaN(decimal) && decimal.toString() === location.id) {
+          return decimal;
+        }
+        // Try hex parsing (for IDs like "744dbdc919e4")
+        const hex = parseInt(location.id, 16);
+        if (!isNaN(hex) && hex.toString(16) === location.id.toLowerCase()) {
+          return hex;
+        }
+        // If parsing fails, log warning but continue (might be a CUID)
+        console.warn(`Could not parse locationId "${location.id}" as number. Measurements may not load.`);
+        return undefined;
+      })()
+    : undefined;
+
+  const {
+    data: chartMeasurements,
+    isLoading: chartLoading,
+    error: chartError,
+    refetch: refetchChart,
+  } = useMeasurements({
+    locationId: locationIdNumber,
+    startDate: dateRange.startDate,
+    endDate: dateRange.endDate,
+    limit: 1000,
+    enabled: !!location && !!locationIdNumber && !isNaN(locationIdNumber),
+  });
+
+
   useEffect(() => {
     async function fetchLocationData() {
       if (!locationId) {
@@ -164,20 +234,33 @@ export default function LocationDetailPage() {
         const locationData = await (orpcClient.airgradient.locations.get as any)({ id: locationId });
         setLocation(locationData);
 
-        const allMeasures = await (orpcClient.airgradient.measures.getCurrentMeasures as any)({});
-        
-        if ((allMeasures as any)?.json?.code) {
-          const error = (allMeasures as any)?.json;
+        // Parse location ID from the actual location data
+        const actualLocationId = (() => {
+          if (locationData?.id) {
+            const parsed = parseInt(String(locationData.id), 10);
+            if (!isNaN(parsed)) {
+              return parsed;
+            }
+          }
+          // If parsing fails, log warning but continue (might be a CUID)
+          console.warn(`Could not parse locationId "${locationData?.id}" as number. Using locationId from URL: ${locationId}`);
+          const parsed = parseInt(locationId, 10);
+          if (!isNaN(parsed)) {
+            return parsed;
+          }
+          return undefined;
+        })();
+
+        const locationMeasuresResponse = actualLocationId
+          ? await (orpcClient.airgradient.measures.getLocationCurrentMeasures as any)({ locationId: actualLocationId })
+          : [];
+
+        if ((locationMeasuresResponse as any)?.json?.code) {
+          const error = (locationMeasuresResponse as any)?.json;
           throw new Error(error.message || `API error: ${error.code}`);
         }
-        
-        const measuresData = (allMeasures as any)?.json || allMeasures;
-        
-        const locationMeasures = Array.isArray(measuresData) 
-          ? measuresData.filter((m: any) => String(m.locationId) === locationId)
-          : [];
-        
-        const rawMeasures = locationMeasures;
+
+        const rawMeasures = actualLocationId ? ((locationMeasuresResponse as any)?.json || locationMeasuresResponse) : [];
 
         const sensorsMap = new Map<string, Sensor>();
         if (Array.isArray(rawMeasures)) {
@@ -201,9 +284,12 @@ export default function LocationDetailPage() {
           });
         }
         setSensors(Array.from(sensorsMap.values()));
-        setMeasurements(Array.isArray(rawMeasures) ? rawMeasures.slice(0, 20) : []);
+        setMeasurements(Array.isArray(rawMeasures) ? rawMeasures.slice(0, 100) : []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to fetch location data");
+        const errorMessage = err instanceof Error ? err.message : "Failed to fetch location data";
+        console.error("Error fetching location data:", err);
+        setError(errorMessage);
+        setLocation(null);
       } finally {
         setLoading(false);
       }
@@ -584,6 +670,35 @@ export default function LocationDetailPage() {
           </svg>
           <h3 className="text-lg font-semibold text-card-foreground mb-2">No measurements available</h3>
           <p className="text-muted-foreground">There are no recent measurements for this location.</p>
+        </div>
+      )}
+
+      {location && (
+        <div className="mt-8 space-y-6">
+          <div>
+            <h2 className="text-2xl font-semibold text-foreground mb-6">Measurement Charts</h2>
+
+            {/* Action Bar */}
+            <MeasurementActionBar
+              selectedFields={selectedFields}
+              onFieldsChange={setSelectedFields}
+              dateRange={dateRange}
+              onRangeChange={handleDateRangeChange}
+              className="mb-6"
+            />
+
+            {/* Full Width Chart */}
+            <div className="w-full">
+              <MeasurementChart
+                data={chartMeasurements || []}
+                fields={selectedFields}
+                isLoading={chartLoading}
+                error={chartError}
+                onRetry={refetchChart}
+                dateRange={dateRange}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

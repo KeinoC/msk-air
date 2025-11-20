@@ -24,11 +24,11 @@ export const measure = z.object({
   noxIndex: z.number().optional(),
   wifi: z.number().optional(),
   datapoints: z.number().optional(),
-  timestamp: z.string(),
+  timestamp: z.string().optional(),
   firmwareVersion: z.string().optional(),
   longitude: z.number().nullable().optional(),
   latitude: z.number().nullable().optional(),
-});
+}).passthrough(); // Allow additional fields from API
 
 export const measuresArray = z.array(measure);
 
@@ -54,7 +54,16 @@ export const getLocationCurrentMeasures = {
   request: z.object({
     locationId: z.number(),
   }),
-  response: z.array(measure),
+  // Temporarily use z.any() to see what the API actually returns
+  response: z.any().transform((val) => {
+    // If it's already an array, return it
+    if (Array.isArray(val)) return val;
+    // If it's undefined or null, return empty array
+    if (val == null) return [];
+    // Otherwise return empty array and log warning
+    console.warn('Unexpected response type for getLocationCurrentMeasures:', typeof val, val);
+    return [];
+  }),
 };
 
 export const getLocationRawMeasures = {

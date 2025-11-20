@@ -61,23 +61,56 @@ model Sensor {
 }
 
 model Measurement {
-  id           String   @id @default(uuid())
-  sensorId     String?
-  serialNumber String?
-  pm25         Float?
-  pm01         Float?
-  pm10         Float?
-  pm03PCount   Float?
-  atmp         Float?
-  rhum         Float?
-  rco2         Float?
-  tvoc         Float?
-  nox          Float?
-  wifi         Float?
-  boot         Float?
-  date         String?
-  timestamp    Int?
-  createdAt    DateTime @default(now())
+  id              String   @id @default(uuid())
+  sensorId        String?
+  serialNumber    String?
+  
+  // Location fields (from measure API)
+  locationId      Int?
+  locationName    String?
+  locationType    String?
+  
+  // PM measurements - raw
+  pm01            Float?
+  pm02            Float?  // This is pm25 in API
+  pm10            Float?
+  pm03PCount      Float?
+  
+  // PM measurements - corrected
+  pm01_corrected  Float?
+  pm02_corrected  Float?  // This is pm25_corrected in API
+  pm10_corrected  Float?
+  
+  // Environmental - raw
+  atmp            Float?
+  rhum            Float?
+  rco2            Float?
+  
+  // Environmental - corrected
+  atmp_corrected  Float?
+  rhum_corrected  Float?
+  rco2_corrected  Float?
+  
+  // VOC and other indices
+  tvoc            Float?
+  tvocIndex       Float?
+  noxIndex        Float?
+  
+  // Sensor info
+  wifi            Float?
+  boot            Float?
+  model           String?
+  firmwareVersion String?
+  datapoints      Int?     // For aggregated data
+  
+  // Location coordinates
+  longitude       Float?
+  latitude        Float?
+  
+  // Timestamps
+  date            String?
+  timestamp       Int?     // Converted from ISO string
+  createdAt       DateTime @default(now())
 
   sensor Sensor? @relation(fields: [sensorId], references: [id], onDelete: SetNull)
 
@@ -85,6 +118,7 @@ model Measurement {
   @@index([serialNumber])
   @@index([timestamp])
   @@index([createdAt])
+  @@index([locationId])
   @@map("measurements")
 }
 

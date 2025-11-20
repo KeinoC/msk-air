@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { ModeToggle } from "./mode-toggle";
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -16,16 +17,18 @@ export default function Navbar() {
             </Link>
           </div>
 
-          <div className="hidden md:flex md:items-center md:space-x-8">
+          <div className="hidden md:flex md:items-center md:space-x-4">
             <Link
               href="/dashboard"
               className="text-muted-foreground hover:text-primary transition-colors font-medium"
             >
               Dashboard
             </Link>
+            <ModeToggle />
           </div>
 
-          <div className="md:hidden">
+          <div className="md:hidden flex items-center space-x-2">
+            <ModeToggle />
             <button
               onClick={() => setIsOpen(!isOpen)}
               className="text-muted-foreground hover:text-primary focus:outline-none focus:text-primary"
